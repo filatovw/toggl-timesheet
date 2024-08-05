@@ -85,30 +85,39 @@ def get_last_day_of_month(start_date: datetime) -> datetime:
 
 @dataclasses.dataclass
 class Config:
+    output_path: pathlib.Path
     year: int
     month: int
 
 
 def parse_args() -> Config:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--output-path", "-o", type=str, default="./data/bronze", help="path to the deltalake DWH")
     parser.add_argument("--year", "-y", type=int, required=True, help="Year")
     parser.add_argument("--month", "-m", type=int, required=True, help="Month")
     parsed = parser.parse_args()
-    return Config(parsed.year, parsed.month)
+    return Config(
+        output_path=pathlib.Path(parsed.output_path),
+        year=parsed.year,
+        month=parsed.month,
+    )
 
 
 def run(logger: logging.Logger) -> None:
     token = os.environ["TOGGL_API_TOKEN"]
     client = TogglClient(logger, token)
     config = parse_args()
+
+    config.output_path.mkdir(parents=True, exist_ok=True)
+
     # get organization
     organizations = client.get_organizations()
-    with open(DATALAKE_PATH / "organizations.json", "w") as fout:
+    with open(config.output_path / "organizations.json", "w") as fout:
         json.dump(organizations, fp=fout, indent=2)
 
     # get workspace
     workspaces = client.get_workspaces()
-    with open(DATALAKE_PATH / "workspaces.json", "w") as fout:
+    with open(config.output_path/ "workspaces.json", "w") as fout:
         json.dump(workspaces, fp=fout, indent=2)
 
     # find workspace id (I have just one)
@@ -122,7 +131,7 @@ def run(logger: logging.Logger) -> None:
     # get timesheet entries. This method works strange.
     data = client.get_time_entries(workspace_id, start_date, end_date)
     path = [start_date.strftime("%Y"), start_date.strftime("%m"), "time_entries.csv"]
-    report_path = pathlib.Path(DATALAKE_PATH, *path)
+    report_path = pathlib.Path(config.output_path, *path)
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(report_path, "wb") as fout:
